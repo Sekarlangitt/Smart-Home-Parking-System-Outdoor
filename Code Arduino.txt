@@ -1,0 +1,130 @@
+#define BLYNK_PRINT Serial
+#include <ESP8266WiFi.h>
+#include <BlynkSimpleEsp8266.h>
+#include <Servo.h>
+#include <DHT.h>
+
+#define BLYNK_TEMPLATE_ID "TMPL6CnvhW6n3"
+#define BLYNK_TEMPLATE_NAME "Quickstart Template"
+#define BLYNK_AUTH_TOKEN "7TIc9YqQvzKOtodoJZqGnlWNpRLnRxq_"
+
+char ssid[] = "Whos";
+char pass[] = "Natanael";
+
+#define LED_PIN 5
+#define GATE_SERVO_PIN 14
+#define TRIGGER_PIN 12
+#define ECHO_PIN 13
+#define DHT_PIN 15
+#define DHTTYPE DHT11
+#define LED_OPEN 4
+#define LED_CLOSED 2
+
+#define V_LED_BUTTON V0
+#define V_GATE_BUTTON V1
+#define V_AUTO_BUTTON V2
+#define V_TEMPERATURE_LABEL V3
+#define V_HUMIDITY_LABEL V4
+
+int ledState = LOW;
+int gateState = LOW;
+int autoState = LOW;
+
+Servo gateServo;
+DHT dht(DHT_PIN, DHTTYPE);
+
+void setup() {
+	Serial.begin(9600);
+	Blynk.begin(BLYNK_AUTH_TOKEN, ssid, pass);
+	pinMode(LED_PIN, OUTPUT);
+
+	pinMode(LED_OPEN, OUTPUT);
+	pinMode(LED_CLOSED, OUTPUT);
+
+	pinMode(GATE_SERVO_PIN, OUTPUT);
+	pinMode(TRIGGER_PIN, OUTPUT);
+	pinMode(ECHO_PIN, INPUT);
+	dht.begin();
+	gateServo.attach(GATE_SERVO_PIN);
+}
+
+void loop() {
+	Blynk.run();
+
+	if (autoState) {
+	
+		int lightLevel = analogRead(A0);
+		Serial.print("LDR: ");
+		Serial.println(lightLevel);
+		
+		if (lightLevel < 80) {
+		digitalWrite(LED_PIN, HIGH);
+		} else {
+		digitalWrite(LED_PIN, LOW);
+		}
+
+		long duration, distance;
+		digitalWrite(TRIGGER_PIN, LOW);
+		delayMicroseconds(2);
+		digitalWrite(TRIGGER_PIN, HIGH);
+		delayMicroseconds(10);
+		digitalWrite(TRIGGER_PIN, LOW);
+		duration = pulseIn(ECHO_PIN, HIGH);
+
+		distance = duration / 58.2;
+		Serial.print("Distance (cm): ");
+		Serial.println(distance);
+
+		if (distance < 10) {
+		gateServo.write(45);
+		digitalWrite(LED_CLOSED, LOW);
+		digitalWrite(LED_OPEN, HIGH);
+		} else {
+		digitalWrite(LED_OPEN, LOW);
+		digitalWrite(LED_CLOSED, HIGH);
+		gateServo.write(0);
+		}
+	}
+	else {
+		digitalWrite(LED_PIN, ledState);
+
+		if (gateState) {
+		digitalWrite(LED_CLOSED, LOW);
+		digitalWrite(LED_OPEN, HIGH);
+		gateServo.write(45);
+		} else {
+		gateServo.write(0);
+		digitalWrite(LED_OPEN, LOW);
+		digitalWrite(LED_CLOSED, HIGH);
+		}
+	}
+
+	float temperature = dht.readTemperature();
+	float humidity = dht.readHumidity();
+
+	Serial.print("Temp: ");
+	Serial.println(temperature);
+	Serial.print("Humd: ");
+	Serial.println(humidity);
+
+	Blynk.virtualWrite(V_TEMPERATURE_LABEL, temperature);
+	Blynk.virtualWrite(V_HUMIDITY_LABEL, humidity);
+}
+
+BLYNK_WRITE(V_LED_BUTTON) {
+	ledState = param.asInt();
+	autoState = LOW;
+	gateState = LOW;
+}
+
+BLYNK_WRITE(V_GATE_BUTTON) {
+	gateState = param.asInt();
+	autoState = LOW;
+	ledState = LOW;
+}
+
+BLYNK_WRITE(V_AUTO_BUTTON) {
+	autoState = param.asInt();
+	ledState = LOW;
+	gateState = LOW;
+}
